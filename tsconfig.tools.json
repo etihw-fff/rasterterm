@@ -1,0 +1,9 @@
+{
+  "extends": "./tsconfig.base.json",
+  "compilerOptions": {
+    "lib": ["ES2022", "DOM"],
+    "types": ["node", "@wdio/globals/types", "@wdio/mocha-framework", "@wdio/electron-service"],
+    "tsBuildInfoFile": "./node_modules/.cache/tsconfig.tools.tsbuildinfo"
+  },
+  "include": ["vitest.config.ts", "wdio.conf.ts", "tests/e2e/**/*.ts", "src/shared/**/*.ts"]
+}

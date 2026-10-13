@@ -1,0 +1,11 @@
+node_modules/
+out/
+dist/
+coverage/
+test-results/
+*.tsbuildinfo
+.eslintcache
+.DS_Store
+.env
+.env.*
+!.env.example

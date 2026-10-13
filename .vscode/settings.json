@@ -1,0 +1,14 @@
+{
+  "editor.defaultFormatter": "esbenp.prettier-vscode",
+  "editor.formatOnSave": true,
+  "editor.codeActionsOnSave": {
+    "source.fixAll.eslint": "explicit"
+  },
+  "typescript.tsdk": "node_modules/typescript/lib",
+  "workbench.editor.customLabels.enabled": true,
+  "workbench.editor.customLabels.patterns": {
+    "**/src/main/**": "Main: ${filename}",
+    "**/src/preload/**": "Preload: ${filename}",
+    "**/src/renderer/**": "Renderer: ${filename}"
+  }
+}
