@@ -27,6 +27,7 @@ export default defineConfig([
         "error",
         { argsIgnorePattern: "^_", varsIgnorePattern: "^_", caughtErrorsIgnorePattern: "^_" },
       ],
+      "@typescript-eslint/consistent-type-definitions": ["error", "type"],
     },
   },
   {
@@ -42,6 +43,12 @@ export default defineConfig([
       curly: ["error", "all"],
       "prefer-const": "error",
       "no-console": ["warn", { allow: ["warn", "error"] }],
+    },
+  },
+  {
+    files: ["src/renderer/src/env.d.ts"],
+    rules: {
+      "@typescript-eslint/consistent-type-definitions": "off",
     },
   },
   prettier,
