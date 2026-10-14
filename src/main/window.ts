@@ -8,9 +8,9 @@ export function createMainWindow(): BrowserWindow {
     height: 480,
     minWidth: 640,
     minHeight: 400,
+    center: true,
     title: "RasterTerm",
     backgroundColor: "#000000",
-
     webPreferences: {
       preload: join(__dirname, "../preload/index.js"),
       contextIsolation: true,
