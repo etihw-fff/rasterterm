@@ -1,13 +1,20 @@
 import { app, BrowserWindow, dialog, ipcMain } from "electron";
 
+import type { AppSettings } from "../shared/settings";
+
 const startedAt = Date.now();
 
-export function registerIpcHandlers(): void {
+export function registerIpcHandlers(getSettings: () => AppSettings): void {
   ipcMain.handle("rasterterm:get-startup-info", () => {
     return {
       path: app.isPackaged ? app.getPath("exe") : app.getAppPath(),
       startedAt,
     };
+  });
+
+  // Rendererが現在の設定を取得するためのIPC。
+  ipcMain.handle("rasterterm:get-settings", () => {
+    return getSettings();
   });
 
   ipcMain.handle("rasterterm:show-error", async (event, message: unknown): Promise<void> => {

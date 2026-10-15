@@ -1,3 +1,4 @@
+import type { AppSettings } from "../../../shared/settings";
 import { revealCanvas } from "../effects/reveal";
 import { wipeCanvas } from "../effects/wipe";
 import type { VideoPlaybackController } from "./playback";
@@ -5,15 +6,19 @@ import type { VideoPlaybackController } from "./playback";
 const SEEK_TIMEOUT_MS = 10000;
 const BLACK_HOLD_MS = 1000;
 
+type LoopStyle = AppSettings["loopStyle"];
+
 type TransitionOptions = {
   video: HTMLVideoElement;
   canvas: HTMLCanvasElement;
   playback: VideoPlaybackController;
+  loopStyle?: LoopStyle;
   onError: (error: unknown) => void;
 };
 
 export type VideoTransition = {
   start: () => Promise<void>;
+  setLoopStyle: (style: LoopStyle) => void;
   dispose: () => void;
 };
 
@@ -55,8 +60,15 @@ const seekToStart = (video: HTMLVideoElement, signal: AbortSignal): Promise<bool
       return;
     }
 
+    // 既に先頭フレームを取得できる場合、余分なシークは行わない。
+    if (video.currentTime === 0 && !video.seeking && !video.ended && video.readyState >= 2) {
+      resolve(true);
+      return;
+    }
+
     let timeoutId: number | null = null;
     let seekFinished = false;
+    let completed = false;
 
     const cleanup = (): void => {
       video.removeEventListener("seeked", onSeeked);
@@ -65,11 +77,17 @@ const seekToStart = (video: HTMLVideoElement, signal: AbortSignal): Promise<bool
       signal.removeEventListener("abort", onAbort);
 
       if (timeoutId !== null) {
-        clearTimeout(timeoutId);
+        window.clearTimeout(timeoutId);
+        timeoutId = null;
       }
     };
 
     const finish = (value: boolean): void => {
+      if (completed) {
+        return;
+      }
+
+      completed = true;
       cleanup();
       resolve(value);
     };
@@ -95,6 +113,11 @@ const seekToStart = (video: HTMLVideoElement, signal: AbortSignal): Promise<bool
     signal.addEventListener("abort", onAbort, { once: true });
 
     timeoutId = window.setTimeout(() => {
+      if (completed) {
+        return;
+      }
+
+      completed = true;
       cleanup();
       reject(new Error("先頭フレームへの移動が完了しませんでした"));
     }, SEEK_TIMEOUT_MS);
@@ -102,6 +125,7 @@ const seekToStart = (video: HTMLVideoElement, signal: AbortSignal): Promise<bool
     try {
       video.currentTime = 0;
     } catch (error) {
+      completed = true;
       cleanup();
       reject(error instanceof Error ? error : new Error(String(error)));
     }
@@ -113,17 +137,31 @@ export const createVideoTransition = (options: TransitionOptions): VideoTransiti
   const controller = new AbortController();
   const { signal } = controller;
 
-  let transitioning = false;
+  let currentLoopStyle: LoopStyle = options.loopStyle ?? "transition";
 
-  // 即時ループを止め、endedイベントから独自のループを実行する。
-  video.loop = false;
+  let activeLoopController: AbortController | null = null;
+  let activeCycle: Promise<void> | null = null;
+  let recoveryController: AbortController | null = null;
+
+  // Directでは動画要素の標準ループを使う。
+  // Transitionではendedイベントから独自演出を実行する。
+  video.loop = currentLoopStyle === "direct";
+
+  const reportError = (error: unknown): void => {
+    if (signal.aborted) {
+      return;
+    }
+
+    playback.pause();
+    onError(error);
+  };
 
   const redraw = (): void => {
     playback.resize();
   };
 
   const start = async (): Promise<void> => {
-    // 初回は600msのReveal後に通常再生を開始する。
+    // 初回Revealは両方のLoop Styleで共通。
     redraw();
 
     const revealed = await revealCanvas(canvas, redraw, signal);
@@ -136,55 +174,108 @@ export const createVideoTransition = (options: TransitionOptions): VideoTransiti
   };
 
   const onEnded = (): void => {
-    if (signal.aborted || transitioning) {
+    if (signal.aborted || currentLoopStyle === "direct" || activeCycle !== null) {
       return;
     }
 
-    transitioning = true;
-
-    // 最終フレームを保持して再生を停止する。
+    // Transitionの場合だけ、再生を止めて演出を開始する。
     playback.pause();
 
-    void (async (): Promise<void> => {
+    const loopController = new AbortController();
+    activeLoopController = loopController;
+
+    const task = (async (): Promise<void> => {
       // ① 400msの黒侵食
-      const wiped = await wipeCanvas(canvas, signal);
+      const wiped = await wipeCanvas(canvas, loopController.signal);
 
       if (!wiped) {
         return;
       }
 
       // ② 黒画面を1秒間保持
-      const waited = await waitWhileBlack(signal);
+      const waited = await waitWhileBlack(loopController.signal);
 
       if (!waited) {
         return;
       }
 
       // ③ 先頭フレームへ移動
-      const seeked = await seekToStart(video, signal);
+      const seeked = await seekToStart(video, loopController.signal);
 
       if (!seeked) {
         return;
       }
 
       // ④ 600msのReveal
-      const revealed = await revealCanvas(canvas, redraw, signal);
+      const revealed = await revealCanvas(canvas, redraw, loopController.signal);
 
       if (!revealed) {
         return;
       }
 
-      // ⑤ Reveal完了後に再生再開
+      // ⑤ 再生再開
+      await playback.resume();
+    })();
+
+    activeCycle = task
+      .catch((error: unknown) => {
+        reportError(error);
+      })
+      .finally(() => {
+        if (activeLoopController === loopController) {
+          activeLoopController = null;
+        }
+
+        activeCycle = null;
+      });
+  };
+
+  const setLoopStyle = (style: LoopStyle): void => {
+    if (signal.aborted || style === currentLoopStyle) {
+      return;
+    }
+
+    currentLoopStyle = style;
+
+    // 次のループから適用できるよう、標準ループの状態を更新する。
+    video.loop = style === "direct";
+
+    // 通常再生中であれば、現在の再生はそのまま継続する。
+    if (style !== "direct" || activeLoopController === null || activeCycle === null) {
+      return;
+    }
+
+    // Transition演出中にDirectを選択した場合。
+    // 進行中の演出を中断し、先頭から再生し直す。
+    activeLoopController.abort();
+
+    const pendingCycle = activeCycle;
+    const recovery = new AbortController();
+    recoveryController = recovery;
+
+    void (async (): Promise<void> => {
+      // 古い演出処理が完全に終了するまで待つ。
+      await pendingCycle;
+
+      if (signal.aborted || recovery.signal.aborted) {
+        return;
+      }
+
+      const seeked = await seekToStart(video, recovery.signal);
+
+      if (!seeked) {
+        return;
+      }
+
       await playback.resume();
     })()
       .catch((error: unknown) => {
-        if (!signal.aborted) {
-          playback.pause();
-          onError(error);
-        }
+        reportError(error);
       })
       .finally(() => {
-        transitioning = false;
+        if (recoveryController === recovery) {
+          recoveryController = null;
+        }
       });
   };
 
@@ -196,8 +287,11 @@ export const createVideoTransition = (options: TransitionOptions): VideoTransiti
     }
 
     controller.abort();
+    activeLoopController?.abort();
+    recoveryController?.abort();
+
     video.removeEventListener("ended", onEnded);
   };
 
-  return { start, dispose };
+  return { start, setLoopStyle, dispose };
 };
