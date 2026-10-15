@@ -6,7 +6,7 @@
 
     <meta
       http-equiv="Content-Security-Policy"
-      content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; connect-src 'self' ws://127.0.0.1:*; object-src 'none'; base-uri 'none'"
+      content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; connect-src 'self' ws://127.0.0.1:*; media-src 'self' blob:; object-src 'none'; base-uri 'none'"
     />
 
     <title>RasterTerm</title>
@@ -18,6 +18,18 @@
         このアプリケーションではCanvasが必要です。
       </canvas>
     </main>
+
+    <dialog
+      id="video-error-dialog"
+      aria-labelledby="video-error-title"
+      aria-describedby="video-error-message"
+    >
+      <h2 id="video-error-title">ERROR</h2>
+      <p id="video-error-message"></p>
+      <form method="dialog">
+        <button type="submit">閉じる</button>
+      </form>
+    </dialog>
 
     <script type="module" src="/src/main.ts"></script>
   </body>
