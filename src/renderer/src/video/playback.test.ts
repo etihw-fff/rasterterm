@@ -60,6 +60,7 @@ describe("ASCII動画の再生制御", () => {
     videoWidth: number;
     videoHeight: number;
     readyState: number;
+    seeking: boolean;
   };
 
   let canvas: HTMLCanvasElement;
@@ -142,6 +143,7 @@ describe("ASCII動画の再生制御", () => {
       videoWidth: 1920,
       videoHeight: 1080,
       readyState: 2,
+      seeking: false,
     };
 
     video = Object.assign(videoState, {
@@ -565,5 +567,100 @@ describe("ASCII動画の再生制御", () => {
     expect(mocks.drawAsciiFrame).not.toHaveBeenCalled();
     expect(requestVideoFrameCallback).not.toHaveBeenCalled();
     expect(frameCallbacks.size).toBe(0);
+  });
+
+  // ここからは以前の playback-loop.test.ts にあった検証を統合する。
+
+  test("ループ境界でreadyStateが低下しても停止せず描画を再開する", async () => {
+    const controller = createController();
+
+    await controller.start();
+
+    videoState.readyState = 1;
+    emitNextFrame();
+
+    expect(mocks.drawAsciiFrame).toHaveBeenCalledTimes(1);
+    expect(onError).not.toHaveBeenCalled();
+    expect(pause).not.toHaveBeenCalled();
+    expect(frameCallbacks.size).toBe(1);
+
+    videoState.readyState = 2;
+    emitNextFrame();
+
+    expect(mocks.drawAsciiFrame).toHaveBeenCalledTimes(2);
+    expect(onError).not.toHaveBeenCalled();
+    expect(frameCallbacks.size).toBe(1);
+
+    controller.dispose();
+  });
+
+  test("シーク中は描画を見送り、完了後に再開する", async () => {
+    const controller = createController();
+
+    await controller.start();
+
+    videoState.seeking = true;
+    emitNextFrame();
+
+    expect(mocks.drawAsciiFrame).toHaveBeenCalledTimes(1);
+    expect(onError).not.toHaveBeenCalled();
+    expect(pause).not.toHaveBeenCalled();
+
+    videoState.seeking = false;
+    emitNextFrame();
+
+    expect(mocks.drawAsciiFrame).toHaveBeenCalledTimes(2);
+    expect(frameCallbacks.size).toBe(1);
+
+    controller.dispose();
+  });
+
+  test("動画サイズが一時的に0でも再生を停止しない", async () => {
+    const controller = createController();
+
+    await controller.start();
+
+    videoState.videoWidth = 0;
+    emitNextFrame();
+
+    expect(mocks.readFrame).toHaveBeenCalledTimes(1);
+    expect(onError).not.toHaveBeenCalled();
+    expect(pause).not.toHaveBeenCalled();
+
+    videoState.videoWidth = 1920;
+    emitNextFrame();
+
+    expect(mocks.readFrame).toHaveBeenCalledTimes(2);
+    expect(frameCallbacks.size).toBe(1);
+
+    controller.dispose();
+  });
+
+  test("一時的なフレーム不足の後に本当の描画エラーが起きた場合は停止する", async () => {
+    const controller = createController();
+
+    await controller.start();
+
+    videoState.readyState = 1;
+    emitNextFrame();
+
+    expect(onError).not.toHaveBeenCalled();
+    expect(pause).not.toHaveBeenCalled();
+
+    videoState.readyState = 2;
+
+    const error = new Error("ループ再開後の描画エラー");
+
+    mocks.readFrame.mockImplementationOnce(() => {
+      throw error;
+    });
+
+    emitNextFrame();
+
+    expect(onError).toHaveBeenCalledExactlyOnceWith(error);
+    expect(pause).toHaveBeenCalledTimes(1);
+    expect(frameCallbacks.size).toBe(0);
+
+    controller.dispose();
   });
 });

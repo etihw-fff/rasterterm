@@ -37,6 +37,15 @@ export const createVideoPlayback = (options: VideoPlaybackOptions): VideoPlaybac
   let generation = 0;
   let pendingStart: Promise<void> | null = null;
 
+  // ループ境界のシーク中はフレームが一時的に利用できなくなる。
+  const isFrameAvailable = (): boolean =>
+    video.readyState >= 2 &&
+    !video.seeking &&
+    Number.isFinite(video.videoWidth) &&
+    Number.isFinite(video.videoHeight) &&
+    video.videoWidth > 0 &&
+    video.videoHeight > 0;
+
   const updateGrid = (): void => {
     grid = calculateGrid({
       videoWidth: video.videoWidth,
@@ -59,7 +68,6 @@ export const createVideoPlayback = (options: VideoPlaybackOptions): VideoPlaybac
     const glyphs = convertFrameToGlyphs(imageData);
 
     context.resetTransform();
-
     drawAsciiFrame(context, glyphs, grid);
   };
 
@@ -111,7 +119,10 @@ export const createVideoPlayback = (options: VideoPlaybackOptions): VideoPlaybac
       callbackId = null;
 
       try {
-        renderFrame();
+        // フレーム不足は正常な待機状態。停止せず次のフレームを待つ。
+        if (isFrameAvailable()) {
+          renderFrame();
+        }
       } catch (error) {
         pause();
         onError(error);
@@ -141,7 +152,6 @@ export const createVideoPlayback = (options: VideoPlaybackOptions): VideoPlaybac
     const task = (async (): Promise<void> => {
       try {
         updateGrid();
-
         await video.play();
 
         if (currentGeneration !== generation) {
@@ -150,7 +160,10 @@ export const createVideoPlayback = (options: VideoPlaybackOptions): VideoPlaybac
 
         running = true;
 
-        renderFrame();
+        if (isFrameAvailable()) {
+          renderFrame();
+        }
+
         updateScroll();
         scheduleNextFrame();
       } catch (error) {
@@ -192,7 +205,7 @@ export const createVideoPlayback = (options: VideoPlaybackOptions): VideoPlaybac
     try {
       updateGrid();
 
-      if (video.readyState >= 2) {
+      if (isFrameAvailable()) {
         renderFrame();
       }
 
@@ -217,11 +230,5 @@ export const createVideoPlayback = (options: VideoPlaybackOptions): VideoPlaybac
     video.pause();
   };
 
-  return {
-    start,
-    pause,
-    resume,
-    resize,
-    dispose,
-  };
+  return { start, pause, resume, resize, dispose };
 };
