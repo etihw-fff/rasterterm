@@ -1,3 +1,4 @@
+import type { AppSettings } from "../../shared/settings";
 import type { IntroState, StartupInfo } from "./terminal/intro";
 import { drawIntro, FONT } from "./terminal/intro";
 import { registerVideoDrop } from "./video/drop";
@@ -49,10 +50,9 @@ export async function startApp(): Promise<void> {
   const canvasElement: HTMLCanvasElement = canvas;
   const viewportElement: HTMLElement = viewport;
 
-  // Main Processから起動情報を取得する。
   const startupInfo = await getStartupInfo();
+  const initialSettings = await window.rasterterm.getSettings();
 
-  // VGAフォントの読み込み完了を待つ。
   await document.fonts.load(FONT);
 
   const state: IntroState = {
@@ -67,6 +67,9 @@ export async function startApp(): Promise<void> {
   let loadingController: AbortController | null = null;
   let requestId = 0;
   let disposed = false;
+
+  let displayMode: AppSettings["displayMode"] = initialSettings.displayMode;
+  let loopStyle: AppSettings["loopStyle"] = initialSettings.loopStyle;
 
   function redrawIntro(): void {
     if (screen !== "intro" || disposed) {
@@ -97,10 +100,8 @@ export async function startApp(): Promise<void> {
     playback = null;
     loadedVideo = null;
 
-    // アニメーションとイベント監視を終了する。
     currentTransition?.dispose();
 
-    // 再生制御と動画リソースを解放する。
     try {
       currentPlayback?.dispose();
     } finally {
@@ -111,20 +112,17 @@ export async function startApp(): Promise<void> {
   async function handleVideoFile(file: File): Promise<void> {
     const currentRequest = ++requestId;
 
-    // 前の読み込みを中断する。
     loadingController?.abort();
 
     const controller = new AbortController();
     loadingController = controller;
 
     try {
-      // 前の動画を破棄する。
       disposeVideo();
 
       screen = "intro";
       redrawIntro();
 
-      // 新しい動画を読み込む。
       const resource = await loadVideo(file, controller.signal);
 
       if (disposed || currentRequest !== requestId) {
@@ -134,12 +132,11 @@ export async function startApp(): Promise<void> {
 
       loadedVideo = resource;
 
-      // ASCII動画の描画・再生制御を作成する。
       const nextPlayback = createVideoPlayback({
         video: resource.video,
         canvas: canvasElement,
         viewport: viewportElement,
-        mode: "fit",
+        mode: () => displayMode,
         onError: (error: unknown) => {
           if (!disposed && currentRequest === requestId) {
             showError(error);
@@ -149,11 +146,12 @@ export async function startApp(): Promise<void> {
 
       playback = nextPlayback;
 
-      // 初回Revealとループ時のTRANSITIONを作成する。
+      // 現在選択中のLoop Styleを渡す。
       const nextTransition = createVideoTransition({
         video: resource.video,
         canvas: canvasElement,
         playback: nextPlayback,
+        loopStyle,
         onError: (error: unknown) => {
           if (!disposed && currentRequest === requestId) {
             showError(error);
@@ -164,7 +162,6 @@ export async function startApp(): Promise<void> {
       transition = nextTransition;
       screen = "video";
 
-      // 先頭フレームをRevealしてから動画再生を開始する。
       await nextTransition.start();
     } catch (error) {
       if (disposed || currentRequest !== requestId || controller.signal.aborted) {
@@ -197,13 +194,28 @@ export async function startApp(): Promise<void> {
     }
   }
 
-  // 起動情報を最初に表示する。
+  const unsubscribeSettings = window.rasterterm.onSettingsChanged((settings) => {
+    const displayModeChanged = displayMode !== settings.displayMode;
+    const loopStyleChanged = loopStyle !== settings.loopStyle;
+
+    displayMode = settings.displayMode;
+    loopStyle = settings.loopStyle;
+
+    // Loop Styleは動画再生中・演出中でも変更できる。
+    if (loopStyleChanged) {
+      transition?.setLoopStyle(loopStyle);
+    }
+
+    // 表示モードが変わった場合だけグリッドを再計算する。
+    if (displayModeChanged && loadedVideo !== null && !loadedVideo.video.paused) {
+      playback?.resize();
+    }
+  });
+
   redrawIntro();
 
-  // ウィンドウのリサイズに対応する。
   window.addEventListener("resize", handleResize);
 
-  // ドラッグ＆ドロップを登録する。
   const unregisterDrop = registerVideoDrop(
     (file: File) => {
       void handleVideoFile(file);
@@ -213,7 +225,6 @@ export async function startApp(): Promise<void> {
     },
   );
 
-  // アプリ終了時にリソースを解放する。
   window.addEventListener(
     "beforeunload",
     () => {
@@ -222,6 +233,7 @@ export async function startApp(): Promise<void> {
 
       loadingController?.abort();
       unregisterDrop();
+      unsubscribeSettings();
 
       window.removeEventListener("resize", handleResize);
 
@@ -230,14 +242,11 @@ export async function startApp(): Promise<void> {
     { once: true },
   );
 
-  // ① 起動情報のみを表示して1.2秒待つ。
   await sleep(1200);
 
-  // ② ASCIIロゴの全行を一括表示する。
   state.showLogo = true;
   redrawIntro();
 
-  // ③ 0.3秒後にドラッグ＆ドロップ案内を表示する。
   await sleep(300);
 
   state.showGuide = true;

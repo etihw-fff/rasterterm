@@ -1,6 +1,6 @@
 import { convertFrameToGlyphs } from "../ascii/convert";
 import { drawAsciiFrame } from "../ascii/draw";
-import type { GridResult } from "../ascii/grid";
+import type { GridOptions, GridResult } from "../ascii/grid";
 import { calculateGrid } from "../ascii/grid";
 import { createFrameSampler } from "./frame";
 
@@ -8,7 +8,7 @@ export type VideoPlaybackOptions = {
   video: HTMLVideoElement;
   canvas: HTMLCanvasElement;
   viewport: HTMLElement;
-  mode: "fit" | "scroll";
+  mode: GridOptions["mode"] | (() => GridOptions["mode"]);
   onError: (error: unknown) => void;
 };
 
@@ -21,7 +21,13 @@ export type VideoPlaybackController = {
 };
 
 export const createVideoPlayback = (options: VideoPlaybackOptions): VideoPlaybackController => {
-  const { video, canvas, viewport, mode, onError } = options;
+  const { video, canvas, viewport, onError } = options;
+
+  // 表示モードを現在の状態から取得する。
+  const getMode = (): GridOptions["mode"] => {
+    return typeof options.mode === "function" ? options.mode() : options.mode;
+  };
+
   const context = canvas.getContext("2d");
 
   if (!context) {
@@ -37,7 +43,6 @@ export const createVideoPlayback = (options: VideoPlaybackOptions): VideoPlaybac
   let generation = 0;
   let pendingStart: Promise<void> | null = null;
 
-  // ループ境界のシーク中はフレームが一時的に利用できなくなる。
   const isFrameAvailable = (): boolean =>
     video.readyState >= 2 &&
     !video.seeking &&
@@ -52,7 +57,7 @@ export const createVideoPlayback = (options: VideoPlaybackOptions): VideoPlaybac
       videoHeight: video.videoHeight,
       viewportWidth: viewport.clientWidth,
       viewportHeight: viewport.clientHeight,
-      mode,
+      mode: getMode(),
     });
 
     canvas.style.width = `${String(grid.canvasWidth)}px`;
@@ -72,7 +77,7 @@ export const createVideoPlayback = (options: VideoPlaybackOptions): VideoPlaybac
   };
 
   const updateScroll = (): void => {
-    if (mode === "fit") {
+    if (getMode() === "fit") {
       viewport.scrollLeft = 0;
       viewport.scrollTop = 0;
       return;
@@ -119,7 +124,6 @@ export const createVideoPlayback = (options: VideoPlaybackOptions): VideoPlaybac
       callbackId = null;
 
       try {
-        // フレーム不足は正常な待機状態。停止せず次のフレームを待つ。
         if (isFrameAvailable()) {
           renderFrame();
         }
