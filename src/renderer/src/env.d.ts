@@ -7,6 +7,7 @@ declare global {
         path: string;
         startedAt: number;
       }>;
+      showError: (message: string) => Promise<void>;
     };
   }
 }

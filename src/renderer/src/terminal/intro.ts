@@ -14,7 +14,7 @@ const PADDING = 16;
 const LINE_HEIGHT = 16;
 const SECTION_GAP = 24;
 
-const GUIDE_TEXT = "drop video or gif here";
+const GUIDE_TEXT = "drop mp4, mov or webm here";
 
 const LOGO_LINES = [
   String.raw`    _     ____    ____   ___   ___`,
@@ -37,16 +37,15 @@ export function drawIntro(canvas: HTMLCanvasElement, info: StartupInfo, state: I
     throw new Error("Canvasの親要素が見つかりませんでした。");
   }
 
-  // 表示する文字列
+  // 起動情報の文字列を作成する。
   const time = new Date(info.startedAt).toTimeString().slice(0, 8);
   const startupText = `[${time}] ${info.path} >`;
 
-  // 文字の描画位置は常に固定
+  // 各表示要素の位置を計算する。
   const logoTop = PADDING + LINE_HEIGHT + SECTION_GAP;
-
   const guideTop = logoTop + LOGO_LINES.length * LINE_HEIGHT + SECTION_GAP;
 
-  // 文字サイズを固定して、必要な横幅を測定する
+  // 全テキストを収めるために必要な幅を計算する。
   context.font = FONT;
 
   const textWidths = [startupText, ...LOGO_LINES, GUIDE_TEXT].map(
@@ -54,20 +53,15 @@ export function drawIntro(canvas: HTMLCanvasElement, info: StartupInfo, state: I
   );
 
   const requiredWidth = Math.ceil(Math.max(...textWidths)) + PADDING * 2;
-
-  // 最後の案内文まで収まる高さ
   const requiredHeight = guideTop + LINE_HEIGHT + PADDING;
 
-  // ウィンドウより小さくはせず、
-  // 内容がはみ出す場合だけCanvasを広げる
   const width = Math.max(container.clientWidth, requiredWidth);
   const height = Math.max(container.clientHeight, requiredHeight);
 
-  // CSS上のCanvasサイズを設定
   canvas.style.width = `${String(width)}px`;
   canvas.style.height = `${String(height)}px`;
 
-  // 高解像度ディスプレイに対応
+  // Retinaなどの高解像度ディスプレイに対応する。
   const dpr = window.devicePixelRatio || 1;
 
   canvas.width = Math.round(width * dpr);
@@ -75,11 +69,11 @@ export function drawIntro(canvas: HTMLCanvasElement, info: StartupInfo, state: I
 
   context.setTransform(dpr, 0, 0, dpr, 0, 0);
 
-  // 背景
+  // 背景を黒く描画する。
   context.fillStyle = "#000000";
   context.fillRect(0, 0, width, height);
 
-  // フォントと描画設定
+  // ターミナル用の文字設定を適用する。
   context.font = FONT;
   context.fillStyle = "#ffffff";
   context.textBaseline = "top";
@@ -88,14 +82,14 @@ export function drawIntro(canvas: HTMLCanvasElement, info: StartupInfo, state: I
   // ① 起動情報
   context.fillText(startupText, PADDING, PADDING);
 
-  // ② ASCIIロゴ
+  // ② ASCIIロゴは全行を一括表示する。
   if (state.showLogo) {
     LOGO_LINES.forEach((line, index) => {
       context.fillText(line, PADDING, logoTop + index * LINE_HEIGHT);
     });
   }
 
-  // ③ D&D案内
+  // ③ ドラッグ＆ドロップ案内
   if (state.showGuide) {
     context.fillText(GUIDE_TEXT, PADDING, guideTop);
   }
