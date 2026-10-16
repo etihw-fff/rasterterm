@@ -1,4 +1,4 @@
-import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, readdir, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -55,6 +55,11 @@ describe("アプリ設定の保存と読み込み", () => {
 
     expect(parsed).toStrictEqual(settings);
     await expect(loadSettings()).resolves.toStrictEqual(settings);
+
+    // Replacing an existing value leaves no temporary settings files.
+    await saveSettings(DEFAULT_SETTINGS);
+    await expect(loadSettings()).resolves.toStrictEqual(DEFAULT_SETTINGS);
+    expect(await readdir(directory)).toStrictEqual(["settings.json"]);
   });
 
   test("保存先ディレクトリが存在しなくても作成して保存する", async () => {
