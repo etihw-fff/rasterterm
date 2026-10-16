@@ -1,6 +1,6 @@
 import { dialog, Menu, type MenuItemConstructorOptions } from "electron";
 
-import type { AppSettings } from "../shared/settings";
+import { type AppSettings, FONT_SIZES } from "../shared/settings";
 import { saveSettings } from "./settings";
 
 export type GalleryMenuActions = {
@@ -35,7 +35,8 @@ export function registerApplicationMenu(
 
     if (
       nextSettings.displayMode === currentSettings.displayMode &&
-      nextSettings.loopStyle === currentSettings.loopStyle
+      nextSettings.loopStyle === currentSettings.loopStyle &&
+      nextSettings.fontSize === currentSettings.fontSize
     ) {
       return;
     }
@@ -125,6 +126,22 @@ export function registerApplicationMenu(
                 },
               },
             ],
+          },
+
+          {
+            label: "Font Size",
+            submenu: FONT_SIZES.map((size) => ({
+              label: `${String(size)}px`,
+              type: "radio" as const,
+              checked: currentSettings.fontSize === size,
+              enabled: settingsEnabled,
+              click: () => {
+                void changeSettings({
+                  ...currentSettings,
+                  fontSize: size,
+                });
+              },
+            })),
           },
 
           {

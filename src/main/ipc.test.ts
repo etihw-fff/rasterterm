@@ -82,6 +82,7 @@ describe("Main ProcessのIPC通信", () => {
     currentSettings = {
       displayMode: "scroll",
       loopStyle: "direct",
+      fontSize: 10,
     };
 
     // 次の取得では更新後の設定が返る。

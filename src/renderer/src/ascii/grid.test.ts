@@ -12,6 +12,7 @@ describe("明るさをASCII文字に変換する", () => {
         viewportWidth: 640,
         viewportHeight: 400,
         mode: "fit",
+        fontSize: 16,
       },
       expected: { columns: 80, rows: 23, canvasWidth: 640, canvasHeight: 368 },
     },
@@ -22,6 +23,7 @@ describe("明るさをASCII文字に変換する", () => {
         viewportWidth: 640,
         viewportHeight: 400,
         mode: "scroll",
+        fontSize: 16,
       },
       expected: { columns: 89, rows: 25, canvasWidth: 712, canvasHeight: 400 },
     },
@@ -32,6 +34,7 @@ describe("明るさをASCII文字に変換する", () => {
         viewportWidth: 640,
         viewportHeight: 400,
         mode: "fit",
+        fontSize: 16,
       },
       expected: { columns: 28, rows: 25, canvasWidth: 224, canvasHeight: 400 },
     },
@@ -42,6 +45,7 @@ describe("明るさをASCII文字に変換する", () => {
         viewportWidth: 640,
         viewportHeight: 400,
         mode: "scroll",
+        fontSize: 16,
       },
       expected: { columns: 80, rows: 71, canvasWidth: 640, canvasHeight: 1136 },
     },
@@ -52,6 +56,7 @@ describe("明るさをASCII文字に変換する", () => {
         viewportWidth: 640,
         viewportHeight: 400,
         mode: "fit",
+        fontSize: 16,
       },
       expected: { columns: 50, rows: 25, canvasWidth: 400, canvasHeight: 400 },
     },
@@ -70,6 +75,7 @@ describe("明るさをASCII文字に変換する", () => {
       viewportWidth: 650,
       viewportHeight: 410,
       mode: "fit",
+      fontSize: 16,
     };
     const expected: GridResult = {
       columns: 81,
@@ -81,6 +87,22 @@ describe("明るさをASCII文字に変換する", () => {
     expect(result).toStrictEqual(expected);
   });
 
+  test("小さい文字ではグリッド密度が上がり、大きい文字では下がる", () => {
+    const base = {
+      videoWidth: 1920,
+      videoHeight: 1080,
+      viewportWidth: 640,
+      viewportHeight: 400,
+      mode: "fit" as const,
+    };
+    const small = calculateGrid({ ...base, fontSize: 8 });
+    const large = calculateGrid({ ...base, fontSize: 20 });
+    expect(small.columns).toBeGreaterThan(large.columns);
+    expect(small.rows).toBeGreaterThan(large.rows);
+    expect(small.canvasWidth).toBeLessThanOrEqual(base.viewportWidth);
+    expect(large.canvasHeight).toBeLessThanOrEqual(base.viewportHeight);
+  });
+
   test("表示領域が最小サイズの場合", () => {
     const options: GridOptions = {
       videoWidth: 1920,
@@ -88,6 +110,7 @@ describe("明るさをASCII文字に変換する", () => {
       viewportWidth: 8,
       viewportHeight: 16,
       mode: "fit",
+      fontSize: 16,
     };
     const expected: GridResult = {
       columns: 1,
@@ -106,6 +129,7 @@ describe("明るさをASCII文字に変換する", () => {
       viewportWidth: 640,
       viewportHeight: 400,
       mode: "scroll",
+      fontSize: 16,
     };
     const expected: GridResult = {
       columns: 50,
@@ -123,6 +147,7 @@ describe("明るさをASCII文字に変換する", () => {
       viewportWidth: 320,
       viewportHeight: 160,
       mode: "fit",
+      fontSize: 16,
     };
 
     const result = calculateGrid(options);
@@ -138,6 +163,7 @@ describe("明るさをASCII文字に変換する", () => {
         viewportWidth: 640,
         viewportHeight: 400,
         mode: "fit",
+        fontSize: 16,
       },
     },
     {
@@ -147,6 +173,7 @@ describe("明るさをASCII文字に変換する", () => {
         viewportWidth: 640,
         viewportHeight: 400,
         mode: "fit",
+        fontSize: 16,
       },
     },
     {
@@ -156,6 +183,7 @@ describe("明るさをASCII文字に変換する", () => {
         viewportWidth: 7,
         viewportHeight: 400,
         mode: "fit",
+        fontSize: 16,
       },
     },
     {
@@ -165,6 +193,7 @@ describe("明るさをASCII文字に変換する", () => {
         viewportWidth: 640,
         viewportHeight: 15,
         mode: "fit",
+        fontSize: 16,
       },
     },
     {
@@ -174,6 +203,7 @@ describe("明るさをASCII文字に変換する", () => {
         viewportWidth: 640,
         viewportHeight: 400,
         mode: "fit",
+        fontSize: 16,
       },
     },
     {
@@ -183,6 +213,7 @@ describe("明るさをASCII文字に変換する", () => {
         viewportWidth: 640,
         viewportHeight: 400,
         mode: "fit",
+        fontSize: 16,
       },
     },
     {
@@ -192,6 +223,7 @@ describe("明るさをASCII文字に変換する", () => {
         viewportWidth: -Infinity,
         viewportHeight: 400,
         mode: "fit",
+        fontSize: 16,
       },
     },
   ])(

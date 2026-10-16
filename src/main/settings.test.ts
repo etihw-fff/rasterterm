@@ -46,6 +46,7 @@ describe("アプリ設定の保存と読み込み", () => {
     const settings: AppSettings = {
       displayMode: "scroll",
       loopStyle: "direct",
+      fontSize: 10,
     };
 
     await saveSettings(settings);
@@ -60,6 +61,54 @@ describe("アプリ設定の保存と読み込み", () => {
     await saveSettings(DEFAULT_SETTINGS);
     await expect(loadSettings()).resolves.toStrictEqual(DEFAULT_SETTINGS);
     expect(await readdir(directory)).toStrictEqual(["settings.json"]);
+  });
+
+  test("旧形式の設定から表示モード・ループ方式を維持し、文字サイズだけ16pxで補完する", async () => {
+    await writeFile(
+      join(directory, "settings.json"),
+      JSON.stringify({
+        displayMode: "scroll",
+        loopStyle: "direct",
+      }),
+      "utf8",
+    );
+    await expect(loadSettings()).resolves.toStrictEqual({
+      displayMode: "scroll",
+      loopStyle: "direct",
+      fontSize: 16,
+    });
+  });
+
+  test("文字サイズに候補外の値を指定した設定は拒否する", async () => {
+    await writeFile(
+      join(directory, "settings.json"),
+      JSON.stringify({
+        displayMode: "fit",
+        loopStyle: "transition",
+        fontSize: 9,
+      }),
+      "utf8",
+    );
+    await expect(loadSettings()).rejects.toThrow("設定ファイルの内容が不正です。");
+  });
+
+  test("旧候補の22・24・26pxは20pxとして読み込み、他の設定は維持する", async () => {
+    for (const legacySize of [22, 24, 26]) {
+      await writeFile(
+        join(directory, "settings.json"),
+        JSON.stringify({
+          displayMode: "scroll",
+          loopStyle: "direct",
+          fontSize: legacySize,
+        }),
+        "utf8",
+      );
+      await expect(loadSettings()).resolves.toStrictEqual({
+        displayMode: "scroll",
+        loopStyle: "direct",
+        fontSize: 20,
+      });
+    }
   });
 
   test("保存先ディレクトリが存在しなくても作成して保存する", async () => {

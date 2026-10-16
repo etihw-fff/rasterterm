@@ -1,15 +1,16 @@
-import { FONT } from "../terminal/intro";
+import type { FontSize } from "../../../shared/settings";
+import { getCanvasFont, getFontMetrics } from "./font";
 import type { GridResult } from "./grid";
 
 type DrawAsciiFrame = (
   context: CanvasRenderingContext2D,
   glyphs: readonly string[],
   grid: GridResult,
+  fontSize: FontSize,
 ) => void;
 
-const CELL_HEIGHT = 16;
-
-export const drawAsciiFrame: DrawAsciiFrame = (context, glyphs, grid) => {
+export const drawAsciiFrame: DrawAsciiFrame = (context, glyphs, grid, fontSize) => {
+  const { cellHeight } = getFontMetrics(fontSize);
   const expectedLength = grid.columns * grid.rows;
 
   if (glyphs.length !== expectedLength) {
@@ -26,7 +27,7 @@ export const drawAsciiFrame: DrawAsciiFrame = (context, glyphs, grid) => {
     context.canvas.height = grid.canvasHeight;
   }
 
-  context.font = FONT;
+  context.font = getCanvasFont(fontSize);
   context.textAlign = "left";
   context.textBaseline = "top";
 
@@ -39,7 +40,7 @@ export const drawAsciiFrame: DrawAsciiFrame = (context, glyphs, grid) => {
     const startIndex = row * grid.columns;
     const endIndex = startIndex + grid.columns;
     const line = glyphs.slice(startIndex, endIndex).join("");
-    const y = row * CELL_HEIGHT;
+    const y = row * cellHeight;
 
     context.fillText(line, 0, y);
   }

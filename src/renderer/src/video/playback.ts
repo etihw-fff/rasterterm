@@ -1,3 +1,4 @@
+import type { FontSize } from "../../../shared/settings";
 import { convertFrameToGlyphs } from "../ascii/convert";
 import { drawAsciiFrame } from "../ascii/draw";
 import type { GridOptions, GridResult } from "../ascii/grid";
@@ -9,6 +10,7 @@ export type VideoPlaybackOptions = {
   canvas: HTMLCanvasElement;
   viewport: HTMLElement;
   mode: GridOptions["mode"] | (() => GridOptions["mode"]);
+  fontSize: FontSize | (() => FontSize);
   onError: (error: unknown) => void;
 };
 
@@ -28,6 +30,9 @@ export const createVideoPlayback = (options: VideoPlaybackOptions): VideoPlaybac
     return typeof options.mode === "function" ? options.mode() : options.mode;
   };
 
+  const getFontSize = (): FontSize =>
+    typeof options.fontSize === "function" ? options.fontSize() : options.fontSize;
+
   const context = canvas.getContext("2d");
 
   if (!context) {
@@ -37,6 +42,7 @@ export const createVideoPlayback = (options: VideoPlaybackOptions): VideoPlaybac
   const sampler = createFrameSampler();
 
   let grid: GridResult | null = null;
+  let currentFontSize: FontSize = getFontSize();
   let callbackId: number | null = null;
   let running = false;
   let disposed = false;
@@ -52,12 +58,14 @@ export const createVideoPlayback = (options: VideoPlaybackOptions): VideoPlaybac
     video.videoHeight > 0;
 
   const updateGrid = (): void => {
+    currentFontSize = getFontSize();
     grid = calculateGrid({
       videoWidth: video.videoWidth,
       videoHeight: video.videoHeight,
       viewportWidth: viewport.clientWidth,
       viewportHeight: viewport.clientHeight,
       mode: getMode(),
+      fontSize: currentFontSize,
     });
 
     canvas.style.width = `${String(grid.canvasWidth)}px`;
@@ -73,7 +81,7 @@ export const createVideoPlayback = (options: VideoPlaybackOptions): VideoPlaybac
     const glyphs = convertFrameToGlyphs(imageData);
 
     context.resetTransform();
-    drawAsciiFrame(context, glyphs, grid);
+    drawAsciiFrame(context, glyphs, grid, currentFontSize);
   };
 
   const updateScroll = (): void => {

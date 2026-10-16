@@ -1,3 +1,6 @@
+import type { FontSize } from "../../../shared/settings";
+import { getCanvasFont } from "../ascii/font";
+
 export type StartupInfo = {
   path: string;
   startedAt: number;
@@ -8,10 +11,7 @@ export type IntroState = {
   showGuide: boolean;
 };
 
-export const FONT = '16px "RasterTerm VGA"';
-
 const PADDING = 16;
-const LINE_HEIGHT = 16;
 const SECTION_GAP = 24;
 
 const GUIDE_TEXT = "drop mp4, mov or webm here";
@@ -24,7 +24,14 @@ const LOGO_LINES = [
   String.raw`/_/   \_\|____/  \____| |___| |___|`,
 ];
 
-export function drawIntro(canvas: HTMLCanvasElement, info: StartupInfo, state: IntroState): void {
+export function drawIntro(
+  canvas: HTMLCanvasElement,
+  info: StartupInfo,
+  state: IntroState,
+  fontSize: FontSize,
+): void {
+  const LINE_HEIGHT = fontSize;
+  const FONT = getCanvasFont(fontSize);
   const context = canvas.getContext("2d");
 
   if (context === null) {

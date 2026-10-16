@@ -1,7 +1,8 @@
 import type { AppSettings } from "../../shared/settings";
+import { getCanvasFont } from "./ascii/font";
 import { wipeCanvas } from "./effects/wipe";
 import type { IntroState, StartupInfo } from "./terminal/intro";
-import { drawIntro, FONT } from "./terminal/intro";
+import { drawIntro } from "./terminal/intro";
 import { registerVideoDrop } from "./video/drop";
 import type { LoadedVideo } from "./video/load";
 import { loadVideo } from "./video/load";
@@ -54,7 +55,7 @@ export async function startApp(): Promise<void> {
   const startupInfo = await getStartupInfo();
   const initialSettings = await window.rasterterm.getSettings();
 
-  await document.fonts.load(FONT);
+  await document.fonts.load(getCanvasFont(initialSettings.fontSize));
 
   const state: IntroState = {
     showLogo: false,
@@ -76,13 +77,14 @@ export async function startApp(): Promise<void> {
 
   let displayMode: AppSettings["displayMode"] = initialSettings.displayMode;
   let loopStyle: AppSettings["loopStyle"] = initialSettings.loopStyle;
+  let fontSize: AppSettings["fontSize"] = initialSettings.fontSize;
 
   function redrawIntro(): void {
     if (screen !== "intro" || disposed) {
       return;
     }
 
-    drawIntro(canvasElement, startupInfo, state);
+    drawIntro(canvasElement, startupInfo, state, fontSize);
   }
 
   function showError(error: unknown): void {
@@ -187,6 +189,7 @@ export async function startApp(): Promise<void> {
         canvas: canvasElement,
         viewport: viewportElement,
         mode: () => displayMode,
+        fontSize: () => fontSize,
         onError: (error: unknown) => {
           if (!disposed && currentRequest === requestId) {
             showError(error);
@@ -320,16 +323,22 @@ export async function startApp(): Promise<void> {
   const unsubscribeSettings = window.rasterterm.onSettingsChanged((settings) => {
     const displayModeChanged = displayMode !== settings.displayMode;
     const loopStyleChanged = loopStyle !== settings.loopStyle;
+    const fontSizeChanged = fontSize !== settings.fontSize;
 
     displayMode = settings.displayMode;
     loopStyle = settings.loopStyle;
+    fontSize = settings.fontSize;
 
     if (loopStyleChanged) {
       transition?.setLoopStyle(loopStyle);
     }
 
-    if (displayModeChanged && loadedVideo !== null && !isVisualEffectActive()) {
-      playback?.resize();
+    if ((displayModeChanged || fontSizeChanged) && !isVisualEffectActive()) {
+      if (screen === "video") {
+        playback?.resize();
+      } else {
+        redrawIntro();
+      }
     }
   });
 
