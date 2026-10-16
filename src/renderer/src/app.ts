@@ -1,4 +1,5 @@
 import type { AppSettings } from "../../shared/settings";
+import { wipeCanvas } from "./effects/wipe";
 import type { IntroState, StartupInfo } from "./terminal/intro";
 import { drawIntro, FONT } from "./terminal/intro";
 import { registerVideoDrop } from "./video/drop";
@@ -7,7 +8,7 @@ import { loadVideo } from "./video/load";
 import type { VideoPlaybackController } from "./video/playback";
 import { createVideoPlayback } from "./video/playback";
 import type { VideoTransition } from "./video/transition";
-import { createVideoTransition } from "./video/transition";
+import { createVideoTransition, waitWhileBlack } from "./video/transition";
 import type { FileSelectionError } from "./video/validate";
 
 const FILE_ERROR_MESSAGES: Record<FileSelectionError, string> = {
@@ -65,8 +66,13 @@ export async function startApp(): Promise<void> {
   let playback: VideoPlaybackController | null = null;
   let transition: VideoTransition | null = null;
   let loadingController: AbortController | null = null;
+  let removingController: AbortController | null = null;
   let requestId = 0;
+  let switchVisualRequest: number | null = null;
+  let interruptedVideo: LoadedVideo | null = null;
   let disposed = false;
+
+  let activeGalleryId: string | null = null;
 
   let displayMode: AppSettings["displayMode"] = initialSettings.displayMode;
   let loopStyle: AppSettings["loopStyle"] = initialSettings.loopStyle;
@@ -109,28 +115,72 @@ export async function startApp(): Promise<void> {
     }
   }
 
-  async function handleVideoFile(file: File): Promise<void> {
+  async function handleVideoFile(
+    source: File | string,
+    galleryId: string | null = null,
+  ): Promise<void> {
+    removingController?.abort();
+    removingController = null;
     const currentRequest = ++requestId;
 
-    loadingController?.abort();
+    // 前の切り替えが途中なら、新しい要求が描画状態の管理を引き継ぐ。
+    if (switchVisualRequest !== null) {
+      switchVisualRequest = currentRequest;
+    }
 
+    loadingController?.abort();
     const controller = new AbortController();
     loadingController = controller;
 
+    const requestIsStale = (): boolean =>
+      disposed || controller.signal.aborted || currentRequest !== requestId;
+
+    let replacedOldVideo = false;
+    let pendingResource: LoadedVideo | null = null;
+
     try {
-      disposeVideo();
+      // 読み込みが終わるまでは旧映像を消さない。失敗しても再生を維持する。
+      const resource = await loadVideo(source, controller.signal);
+      pendingResource = resource;
 
-      screen = "intro";
-      redrawIntro();
-
-      const resource = await loadVideo(file, controller.signal);
-
-      if (disposed || currentRequest !== requestId) {
+      if (requestIsStale()) {
         resource.dispose();
         return;
       }
 
+      const wasPlaying = screen === "video" && loadedVideo !== null;
+
+      if (wasPlaying) {
+        // 旧映像のフレーム描画とループ演出を止め、最後の映像を残す。
+        transition?.dispose();
+        playback?.pause();
+        interruptedVideo = loadedVideo;
+        switchVisualRequest = currentRequest;
+
+        const wiped = await wipeCanvas(canvasElement, controller.signal);
+        if (!wiped || requestIsStale()) {
+          resource.dispose();
+          return;
+        }
+
+        const waited = await waitWhileBlack(controller.signal);
+        if (!waited || requestIsStale()) {
+          resource.dispose();
+          return;
+        }
+      }
+
+      if (requestIsStale()) {
+        resource.dispose();
+        return;
+      }
+
+      disposeVideo();
+      interruptedVideo = null;
+      replacedOldVideo = true;
       loadedVideo = resource;
+      pendingResource = null;
+      activeGalleryId = galleryId;
 
       const nextPlayback = createVideoPlayback({
         video: resource.video,
@@ -146,7 +196,6 @@ export async function startApp(): Promise<void> {
 
       playback = nextPlayback;
 
-      // 現在選択中のLoop Styleを渡す。
       const nextTransition = createVideoTransition({
         video: resource.video,
         canvas: canvasElement,
@@ -162,25 +211,97 @@ export async function startApp(): Promise<void> {
       transition = nextTransition;
       screen = "video";
 
+      // 動画の切り替え時はLoop Styleに関係なく必ずRevealする。
+      switchVisualRequest = currentRequest;
       await nextTransition.start();
-    } catch (error) {
-      if (disposed || currentRequest !== requestId || controller.signal.aborted) {
+    } catch (error: unknown) {
+      if (requestIsStale()) {
         return;
       }
 
-      try {
+      // 黒侵食を始めた後で読み込みが中断・失敗した場合は、
+      // 停止中の旧動画を再開し、Loop Style の監視も復元する。
+      if (!replacedOldVideo && interruptedVideo !== null && loadedVideo === interruptedVideo) {
+        const oldVideo = loadedVideo;
+        const oldPlayback = playback;
+        interruptedVideo = null;
+        if (oldPlayback !== null) {
+          transition?.dispose();
+          transition = createVideoTransition({
+            video: oldVideo.video,
+            canvas: canvasElement,
+            playback: oldPlayback,
+            loopStyle,
+            onError: showError,
+          });
+          try {
+            oldPlayback.resize();
+            await oldPlayback.resume();
+          } catch (resumeError: unknown) {
+            showError(resumeError);
+          }
+        }
+      }
+      if (replacedOldVideo) {
         disposeVideo();
-      } finally {
+        activeGalleryId = null;
         screen = "intro";
         redrawIntro();
-        showError(error);
       }
+      showError(error);
     } finally {
+      if (switchVisualRequest === currentRequest) {
+        switchVisualRequest = null;
+      }
+      pendingResource?.dispose();
       if (loadingController === controller) {
         loadingController = null;
       }
     }
   }
+
+  async function returnToIntroAfterRemoval(): Promise<void> {
+    // 古い非同期読み込み・再生・演出を停止してから黒侵食を開始する。
+    const currentRequest = ++requestId;
+    loadingController?.abort();
+    activeGalleryId = null;
+    interruptedVideo = null;
+    removingController?.abort();
+
+    const controller = new AbortController();
+    removingController = controller;
+
+    transition?.dispose();
+    playback?.pause();
+
+    try {
+      if (screen === "video" && loadedVideo !== null) {
+        await wipeCanvas(canvasElement, controller.signal);
+      }
+    } catch (error: unknown) {
+      if (!disposed && !controller.signal.aborted && requestId === currentRequest) {
+        showError(error);
+      }
+    } finally {
+      // 再生切り替えが始まった場合、古い完了処理で新しいCanvasを消さない。
+      if (removingController === controller) {
+        removingController = null;
+        if (!disposed && !controller.signal.aborted && requestId === currentRequest) {
+          disposeVideo();
+          screen = "intro";
+          redrawIntro();
+          viewportElement.scrollLeft = 0;
+          viewportElement.scrollTop = 0;
+        }
+      }
+    }
+  }
+
+  const isVisualEffectActive = (): boolean =>
+    switchVisualRequest !== null ||
+    interruptedVideo !== null ||
+    removingController !== null ||
+    transition?.isAnimating() === true;
 
   function handleResize(): void {
     if (disposed) {
@@ -188,7 +309,9 @@ export async function startApp(): Promise<void> {
     }
 
     if (screen === "video") {
-      playback?.resize();
+      if (!isVisualEffectActive()) {
+        playback?.resize();
+      }
     } else {
       redrawIntro();
     }
@@ -201,14 +324,32 @@ export async function startApp(): Promise<void> {
     displayMode = settings.displayMode;
     loopStyle = settings.loopStyle;
 
-    // Loop Styleは動画再生中・演出中でも変更できる。
     if (loopStyleChanged) {
       transition?.setLoopStyle(loopStyle);
     }
 
-    // 表示モードが変わった場合だけグリッドを再計算する。
-    if (displayModeChanged && loadedVideo !== null && !loadedVideo.video.paused) {
+    if (displayModeChanged && loadedVideo !== null && !isVisualEffectActive()) {
       playback?.resize();
+    }
+  });
+
+  const unsubscribeGallery = window.rasterterm.onGalleryEvent((event) => {
+    if (disposed) {
+      return;
+    }
+
+    if (event.type === "play") {
+      if (event.url === undefined) {
+        showError(new Error("ギャラリー動画の再生URLがありません。"));
+        return;
+      }
+
+      void handleVideoFile(event.url, event.id);
+      return;
+    }
+
+    if (activeGalleryId !== null && event.ids.includes(activeGalleryId)) {
+      void returnToIntroAfterRemoval();
     }
   });
 
@@ -216,9 +357,12 @@ export async function startApp(): Promise<void> {
 
   window.addEventListener("resize", handleResize);
 
+  // 動画をLibraryに登録し、Mainの再生通知で読み込む。
   const unregisterDrop = registerVideoDrop(
     (file: File) => {
-      void handleVideoFile(file);
+      void window.rasterterm.importDroppedVideo(file).catch((error: unknown) => {
+        showError(error);
+      });
     },
     (reason: FileSelectionError) => {
       showError(FILE_ERROR_MESSAGES[reason]);
@@ -232,8 +376,10 @@ export async function startApp(): Promise<void> {
       requestId += 1;
 
       loadingController?.abort();
+      removingController?.abort();
       unregisterDrop();
       unsubscribeSettings();
+      unsubscribeGallery();
 
       window.removeEventListener("resize", handleResize);
 

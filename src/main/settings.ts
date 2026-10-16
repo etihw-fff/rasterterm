@@ -1,4 +1,5 @@
-import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { randomUUID } from "node:crypto";
+import { mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 
 import { app } from "electron";
@@ -69,5 +70,12 @@ export const saveSettings = async (settings: AppSettings): Promise<void> => {
   // JSON形式で保存する。
   const content = `${JSON.stringify(settings, null, 2)}\n`;
 
-  await writeFile(filePath, content, "utf8");
+  // Write the new JSON completely before replacing the existing settings.
+  const temporaryPath = join(dirname(filePath), `.settings-${randomUUID()}.tmp`);
+  try {
+    await writeFile(temporaryPath, content, { encoding: "utf8", flag: "wx" });
+    await rename(temporaryPath, filePath);
+  } finally {
+    await rm(temporaryPath, { force: true });
+  }
 };

@@ -1,5 +1,6 @@
-import { contextBridge, ipcRenderer, type IpcRendererEvent } from "electron";
+import { contextBridge, ipcRenderer, type IpcRendererEvent, webUtils } from "electron";
 
+import type { GalleryEvent } from "../shared/gallery-events";
 import type { AppSettings } from "../shared/settings";
 
 type StartupInfo = {
@@ -14,11 +15,19 @@ contextBridge.exposeInMainWorld("rasterterm", {
   showError: (message: string): Promise<void> =>
     ipcRenderer.invoke("rasterterm:show-error", message) as Promise<void>,
 
-  // 現在保存されている設定を取得する。
+  importDroppedVideo: (file: File): Promise<void> => {
+    const filePath = webUtils.getPathForFile(file);
+
+    if (filePath.length === 0) {
+      return Promise.reject(new Error("ドロップされたファイルの保存先を取得できませんでした。"));
+    }
+
+    return ipcRenderer.invoke("rasterterm:import-dropped-video", filePath) as Promise<void>;
+  },
+
   getSettings: (): Promise<AppSettings> =>
     ipcRenderer.invoke("rasterterm:get-settings") as Promise<AppSettings>,
 
-  // 設定変更の通知を受け取る。
   onSettingsChanged: (listener: (settings: AppSettings) => void): (() => void) => {
     const handler = (_event: IpcRendererEvent, settings: AppSettings): void => {
       listener(settings);
@@ -26,9 +35,21 @@ contextBridge.exposeInMainWorld("rasterterm", {
 
     ipcRenderer.on("rasterterm:settings-changed", handler);
 
-    // 監視を解除するための関数を返す。
     return () => {
       ipcRenderer.removeListener("rasterterm:settings-changed", handler);
+    };
+  },
+
+  // ギャラリーの選択・削除をRendererへ通知する。
+  onGalleryEvent: (listener: (event: GalleryEvent) => void): (() => void) => {
+    const handler = (_event: IpcRendererEvent, event: GalleryEvent): void => {
+      listener(event);
+    };
+
+    ipcRenderer.on("rasterterm:gallery-event", handler);
+
+    return () => {
+      ipcRenderer.removeListener("rasterterm:gallery-event", handler);
     };
   },
 });

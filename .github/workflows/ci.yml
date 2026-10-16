@@ -41,20 +41,9 @@ jobs:
       - run: npm ci
       - run: npm audit --omit=dev --audit-level=high
       - run: npm run check:all
-      - name: Electron production build
-        id: app_build
-        if: hashFiles('src/main/index.ts') != '' && hashFiles('src/preload/index.ts') != '' && hashFiles('src/renderer/index.html') != ''
-        run: npm run build
-      - name: Application not implemented
-        if: steps.app_build.outcome == 'skipped'
-        run: echo "Application not implemented; build not executed."
-      - name: E2E (only when test files exist)
-        id: e2e
-        if: steps.app_build.outcome == 'success' && hashFiles('tests/e2e/**/*.e2e.ts', 'tests/e2e/**/*.test.ts', 'tests/e2e/**/*.spec.ts') != ''
+      # test:e2e includes the production build; do not build twice.
+      - name: Electron build and E2E
         run: npm run test:e2e
-      - name: E2E not executed
-        if: steps.e2e.outcome == 'skipped'
-        run: echo "E2E not executed; application entries and E2E specs are required."
       - name: Retain E2E diagnostics
         if: always()
         uses: actions/upload-artifact@v7
@@ -88,14 +77,8 @@ jobs:
           cache: npm
       - run: npm ci
       - name: Generate distribution packages
-        id: package_build
-        if: hashFiles('src/main/index.ts') != '' && hashFiles('src/preload/index.ts') != '' && hashFiles('src/renderer/index.html') != ''
         run: npm run ${{ matrix.script }}
-      - name: Packaging not executed
-        if: steps.package_build.outcome == 'skipped'
-        run: echo "Application not implemented; packaging not executed."
       - uses: actions/upload-artifact@v7
-        if: steps.package_build.outcome == 'success'
         with:
           name: packages-${{ matrix.os }}
           path: |

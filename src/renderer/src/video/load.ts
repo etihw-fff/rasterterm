@@ -3,7 +3,26 @@ export type LoadedVideo = {
   dispose: () => void;
 };
 
-export const loadVideo = (file: File, signal?: AbortSignal): Promise<LoadedVideo> => {
+const isGalleryVideoUrl = (source: string): boolean => {
+  try {
+    const url = new URL(source);
+
+    return (
+      url.protocol === "http:" &&
+      url.hostname === "127.0.0.1" &&
+      url.port !== "" &&
+      /^\/video\/[0-9a-f]{64}\/[a-zA-Z0-9_-]+$/.test(url.pathname) &&
+      url.search === "" &&
+      url.hash === "" &&
+      url.username === "" &&
+      url.password === ""
+    );
+  } catch {
+    return false;
+  }
+};
+
+export const loadVideo = (source: File | string, signal?: AbortSignal): Promise<LoadedVideo> => {
   if (signal?.aborted) {
     return Promise.reject(new DOMException("動画の読み込みが中断されました", "AbortError"));
   }
@@ -17,11 +36,23 @@ export const loadVideo = (file: File, signal?: AbortSignal): Promise<LoadedVideo
     video.playsInline = true;
     video.preload = "auto";
 
-    let objectUrl: string;
+    let objectUrl: string | null = null;
+    let sourceUrl: string;
 
     try {
-      objectUrl = URL.createObjectURL(file);
-    } catch (error) {
+      if (typeof source === "string") {
+        if (!isGalleryVideoUrl(source)) {
+          throw new Error("動画の参照URLが不正です。");
+        }
+
+        // HTTP配信された動画をCanvasへ描画するためCORSを利用する。
+        video.crossOrigin = "anonymous";
+        sourceUrl = source;
+      } else {
+        objectUrl = URL.createObjectURL(source);
+        sourceUrl = objectUrl;
+      }
+    } catch (error: unknown) {
       reject(error instanceof Error ? error : new Error(String(error)));
       return;
     }
@@ -48,7 +79,9 @@ export const loadVideo = (file: File, signal?: AbortSignal): Promise<LoadedVideo
         video.removeAttribute("src");
         video.load();
       } finally {
-        URL.revokeObjectURL(objectUrl);
+        if (objectUrl !== null) {
+          URL.revokeObjectURL(objectUrl);
+        }
       }
     }
 
@@ -110,9 +143,9 @@ export const loadVideo = (file: File, signal?: AbortSignal): Promise<LoadedVideo
     }
 
     try {
-      video.src = objectUrl;
+      video.src = sourceUrl;
       video.load();
-    } catch (error) {
+    } catch (error: unknown) {
       rejectLoad(
         error instanceof Error ? error : new Error("動画の読み込みを開始できませんでした"),
       );

@@ -19,10 +19,11 @@ type TransitionOptions = {
 export type VideoTransition = {
   start: () => Promise<void>;
   setLoopStyle: (style: LoopStyle) => void;
+  isAnimating: () => boolean;
   dispose: () => void;
 };
 
-const waitWhileBlack = (signal: AbortSignal): Promise<boolean> =>
+export const waitWhileBlack = (signal: AbortSignal): Promise<boolean> =>
   new Promise<boolean>((resolve) => {
     if (signal.aborted) {
       resolve(false);
@@ -161,12 +162,9 @@ export const createVideoTransition = (options: TransitionOptions): VideoTransiti
   };
 
   const start = async (): Promise<void> => {
-    // 初回Revealは両方のLoop Styleで共通。
-    redraw();
-
     const revealed = await revealCanvas(canvas, redraw, signal);
 
-    if (!revealed) {
+    if (!revealed || signal.aborted) {
       return;
     }
 
@@ -293,5 +291,7 @@ export const createVideoTransition = (options: TransitionOptions): VideoTransiti
     video.removeEventListener("ended", onEnded);
   };
 
-  return { start, setLoopStyle, dispose };
+  const isAnimating = (): boolean => activeCycle !== null || recoveryController !== null;
+
+  return { start, setLoopStyle, isAnimating, dispose };
 };

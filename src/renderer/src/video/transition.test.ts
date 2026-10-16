@@ -102,6 +102,7 @@ describe("動画のLoop Style", () => {
     events.dispatchEvent(new Event("ended"));
 
     expect(playback.pause).toHaveBeenCalledTimes(1);
+    expect(transition.isAnimating()).toBe(true);
 
     await vi.advanceTimersByTimeAsync(999);
 
@@ -115,6 +116,7 @@ describe("動画のLoop Style", () => {
     expect(effects.revealCanvas).toHaveBeenCalledTimes(2);
     expect(playback.resume).toHaveBeenCalledTimes(1);
     expect(onError).not.toHaveBeenCalled();
+    expect(transition.isAnimating()).toBe(false);
 
     transition.dispose();
   });
@@ -155,6 +157,7 @@ describe("動画のLoop Style", () => {
 
     // Directでは独自の終了演出を呼び出さない。
     expect(effects.wipeCanvas).not.toHaveBeenCalled();
+    expect(transition.isAnimating()).toBe(false);
     expect(playback.pause).not.toHaveBeenCalled();
     expect(playback.resume).not.toHaveBeenCalled();
     expect(onError).not.toHaveBeenCalled();
@@ -165,6 +168,14 @@ describe("動画のLoop Style", () => {
     expect(video.loop).toBe(false);
 
     transition.dispose();
+  });
+
+  test("Directでも動画開始時はRevealしてから再生する", async () => {
+    const environment = createEnvironment("direct");
+    await environment.transition.start();
+    expect(effects.revealCanvas).toHaveBeenCalledTimes(1);
+    expect(environment.playback.start).toHaveBeenCalledTimes(1);
+    environment.transition.dispose();
   });
 
   test("Transitionの途中でDirectに切り替えると演出を中断して再生する", async () => {
