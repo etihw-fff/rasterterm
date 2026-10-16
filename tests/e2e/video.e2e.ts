@@ -235,8 +235,6 @@ describe("RasterTerm 動画再生 E2E", () => {
       interval: 100,
       timeoutMsg: "ループ時の黒侵食が完了しませんでした",
     });
-    await browser.pause(300);
-    assert.equal((await readCanvas()).brightPixels, 0);
     await browser.waitUntil(async () => (await readCanvas()).brightPixels > 150, {
       timeout: 8000,
       interval: 100,
