@@ -3,6 +3,16 @@ import { dialog, Menu, type MenuItemConstructorOptions } from "electron";
 import type { AppSettings } from "../shared/settings";
 import { saveSettings } from "./settings";
 
+export type GalleryMenuActions = {
+  add: () => Promise<void>;
+  select: () => Promise<void>;
+  delete: () => Promise<void>;
+};
+
+export type ApplicationMenuController = {
+  setGalleryHasItems: (hasItems: boolean) => void;
+};
+
 const getErrorMessage = (error: unknown): string => {
   return error instanceof Error ? error.message : String(error);
 };
@@ -10,12 +20,16 @@ const getErrorMessage = (error: unknown): string => {
 export function registerApplicationMenu(
   initialSettings: AppSettings,
   onSettingsChanged: (settings: AppSettings) => void,
-): void {
+  galleryActions?: GalleryMenuActions,
+  initialGalleryHasItems = false,
+): ApplicationMenuController {
   let currentSettings: AppSettings = { ...initialSettings };
   let saving = false;
+  let galleryBusy = false;
+  let galleryHasItems = initialGalleryHasItems;
 
   async function changeSettings(nextSettings: AppSettings): Promise<void> {
-    if (saving) {
+    if (saving || galleryBusy) {
       return;
     }
 
@@ -33,8 +47,6 @@ export function registerApplicationMenu(
       await saveSettings(nextSettings);
 
       currentSettings = { ...nextSettings };
-
-      // 保存に成功した設定をアプリ本体へ通知する。
       onSettingsChanged({ ...currentSettings });
     } catch (error: unknown) {
       dialog.showErrorBox("RasterTerm", `設定を保存できませんでした。\n${getErrorMessage(error)}`);
@@ -44,7 +56,31 @@ export function registerApplicationMenu(
     }
   }
 
+  async function runGalleryAction(operation: () => Promise<void>): Promise<void> {
+    if (saving || galleryBusy) {
+      return;
+    }
+
+    galleryBusy = true;
+    updateMenu();
+
+    try {
+      await operation();
+    } catch (error: unknown) {
+      dialog.showErrorBox(
+        "RasterTerm",
+        `ギャラリーの操作に失敗しました。\n${getErrorMessage(error)}`,
+      );
+    } finally {
+      galleryBusy = false;
+      updateMenu();
+    }
+  }
+
   function updateMenu(): void {
+    const settingsEnabled = !saving && !galleryBusy;
+    const galleryEnabled = galleryActions !== undefined && settingsEnabled;
+
     const template: MenuItemConstructorOptions[] = [
       ...(process.platform === "darwin" ? [{ role: "appMenu" as const }] : []),
 
@@ -68,7 +104,7 @@ export function registerApplicationMenu(
                 label: "Fit",
                 type: "radio",
                 checked: currentSettings.displayMode === "fit",
-                enabled: !saving,
+                enabled: settingsEnabled,
                 click: () => {
                   void changeSettings({
                     ...currentSettings,
@@ -80,7 +116,7 @@ export function registerApplicationMenu(
                 label: "Scroll",
                 type: "radio",
                 checked: currentSettings.displayMode === "scroll",
-                enabled: !saving,
+                enabled: settingsEnabled,
                 click: () => {
                   void changeSettings({
                     ...currentSettings,
@@ -98,7 +134,7 @@ export function registerApplicationMenu(
                 label: "Transition",
                 type: "radio",
                 checked: currentSettings.loopStyle === "transition",
-                enabled: !saving,
+                enabled: settingsEnabled,
                 click: () => {
                   void changeSettings({
                     ...currentSettings,
@@ -110,7 +146,7 @@ export function registerApplicationMenu(
                 label: "Direct",
                 type: "radio",
                 checked: currentSettings.loopStyle === "direct",
-                enabled: !saving,
+                enabled: settingsEnabled,
                 click: () => {
                   void changeSettings({
                     ...currentSettings,
@@ -128,24 +164,44 @@ export function registerApplicationMenu(
         submenu: [
           {
             label: "追加...",
-            enabled: false,
+            enabled: galleryEnabled,
+            click: () => {
+              if (galleryActions !== undefined) {
+                void runGalleryAction(galleryActions.add);
+              }
+            },
           },
           {
             label: "選択...",
-            enabled: false,
+            enabled: galleryEnabled && galleryHasItems,
+            click: () => {
+              if (galleryActions !== undefined && galleryHasItems) {
+                void runGalleryAction(galleryActions.select);
+              }
+            },
           },
           {
             label: "削除...",
-            enabled: false,
+            enabled: galleryEnabled && galleryHasItems,
+            click: () => {
+              if (galleryActions !== undefined && galleryHasItems) {
+                void runGalleryAction(galleryActions.delete);
+              }
+            },
           },
         ],
       },
     ];
 
-    const menu = Menu.buildFromTemplate(template);
-
-    Menu.setApplicationMenu(menu);
+    Menu.setApplicationMenu(Menu.buildFromTemplate(template));
   }
 
   updateMenu();
+
+  return {
+    setGalleryHasItems: (hasItems: boolean): void => {
+      galleryHasItems = hasItems;
+      updateMenu();
+    },
+  };
 }

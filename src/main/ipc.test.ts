@@ -1,3 +1,5 @@
+import { resolve } from "node:path";
+
 import { beforeEach, describe, expect, test, vi } from "vitest";
 
 import { type AppSettings, DEFAULT_SETTINGS } from "../shared/settings";
@@ -11,6 +13,7 @@ const mocks = vi.hoisted(() => ({
   getPath: vi.fn<(name: string) => string>(),
   fromWebContents: vi.fn<(sender: unknown) => unknown>(),
   showMessageBox: vi.fn<(...args: unknown[]) => Promise<void>>(),
+  importDroppedVideo: vi.fn<(filePath: string) => Promise<void>>(),
 }));
 
 vi.mock("electron", () => ({
@@ -52,22 +55,24 @@ describe("Main ProcessのIPC通信", () => {
 
     mocks.getAppPath.mockReturnValue("/rasterterm");
     mocks.showMessageBox.mockResolvedValue(undefined);
+    mocks.importDroppedVideo.mockResolvedValue(undefined);
   });
 
-  test("必要な3種類のIPCが登録される", () => {
-    registerIpcHandlers(() => ({ ...DEFAULT_SETTINGS }));
+  test("必要な4種類のIPCが登録される", () => {
+    registerIpcHandlers(() => ({ ...DEFAULT_SETTINGS }), mocks.importDroppedVideo);
 
-    expect(mocks.handle).toHaveBeenCalledTimes(3);
+    expect(mocks.handle).toHaveBeenCalledTimes(4);
 
     expect(mocks.handlers.has("rasterterm:get-startup-info")).toBe(true);
     expect(mocks.handlers.has("rasterterm:get-settings")).toBe(true);
     expect(mocks.handlers.has("rasterterm:show-error")).toBe(true);
+    expect(mocks.handlers.has("rasterterm:import-dropped-video")).toBe(true);
   });
 
   test("Rendererから現在の設定を取得できる", () => {
     let currentSettings: AppSettings = { ...DEFAULT_SETTINGS };
 
-    registerIpcHandlers(() => ({ ...currentSettings }));
+    registerIpcHandlers(() => ({ ...currentSettings }), mocks.importDroppedVideo);
 
     const handler = getHandler("rasterterm:get-settings");
 
@@ -84,7 +89,7 @@ describe("Main ProcessのIPC通信", () => {
   });
 
   test("Rendererから起動情報を取得できる", () => {
-    registerIpcHandlers(() => ({ ...DEFAULT_SETTINGS }));
+    registerIpcHandlers(() => ({ ...DEFAULT_SETTINGS }), mocks.importDroppedVideo);
 
     const handler = getHandler("rasterterm:get-startup-info");
     const result = handler({});
@@ -105,8 +110,67 @@ describe("Main ProcessのIPC通信", () => {
     expect(mocks.getAppPath).toHaveBeenCalledTimes(1);
   });
 
+  test("有効なドロップ元パスはMainで処理する", async () => {
+    registerIpcHandlers(() => ({ ...DEFAULT_SETTINGS }), mocks.importDroppedVideo);
+
+    const frame = {};
+    const webContents = { mainFrame: frame };
+    mocks.fromWebContents.mockReturnValue({ webContents });
+
+    await expect(
+      getHandler("rasterterm:import-dropped-video")(
+        { sender: webContents, senderFrame: frame },
+        resolve("sample.webm"),
+      ),
+    ).resolves.toBeUndefined();
+
+    expect(mocks.importDroppedVideo).toHaveBeenCalledExactlyOnceWith(resolve("sample.webm"));
+  });
+
+  test("相対パスや不正な入力ではLibrary操作を行わない", async () => {
+    registerIpcHandlers(() => ({ ...DEFAULT_SETTINGS }), mocks.importDroppedVideo);
+    const handler = getHandler("rasterterm:import-dropped-video");
+
+    for (const path of ["", "../sample.webm", 17, null, "a".repeat(4097), "/tmp/\0.webm"]) {
+      await expect(handler({ sender: {} }, path)).rejects.toThrow("動画ファイルのパスが不正です。");
+    }
+
+    expect(mocks.importDroppedVideo).not.toHaveBeenCalled();
+  });
+
+  test("別ウィンドウまたはサブフレームからの要求は拒否する", async () => {
+    registerIpcHandlers(() => ({ ...DEFAULT_SETTINGS }), mocks.importDroppedVideo);
+    const handler = getHandler("rasterterm:import-dropped-video");
+    const webContents = { mainFrame: {} };
+    mocks.fromWebContents.mockReturnValue({ webContents });
+
+    await expect(
+      handler({ sender: {}, senderFrame: webContents.mainFrame }, resolve("sample.webm")),
+    ).rejects.toThrow("許可されていないウィンドウからの操作です。");
+
+    await expect(
+      handler({ sender: webContents, senderFrame: {} }, resolve("sample.webm")),
+    ).rejects.toThrow("許可されていないウィンドウからの操作です。");
+
+    expect(mocks.importDroppedVideo).not.toHaveBeenCalled();
+  });
+
+  test("Libraryへの取り込みで失敗した場合はIPC呼び出し元に伝える", async () => {
+    registerIpcHandlers(() => ({ ...DEFAULT_SETTINGS }), mocks.importDroppedVideo);
+    const webContents = { mainFrame: {} };
+    mocks.fromWebContents.mockReturnValue({ webContents });
+    mocks.importDroppedVideo.mockRejectedValueOnce(new Error("コピーに失敗しました。"));
+
+    await expect(
+      getHandler("rasterterm:import-dropped-video")(
+        { sender: webContents, senderFrame: webContents.mainFrame },
+        resolve("sample.webm"),
+      ),
+    ).rejects.toThrow("コピーに失敗しました。");
+  });
+
   test("不正なエラーメッセージを拒否する", async () => {
-    registerIpcHandlers(() => ({ ...DEFAULT_SETTINGS }));
+    registerIpcHandlers(() => ({ ...DEFAULT_SETTINGS }), mocks.importDroppedVideo);
 
     const handler = getHandler("rasterterm:show-error");
 
@@ -122,7 +186,7 @@ describe("Main ProcessのIPC通信", () => {
   });
 
   test("表示先ウィンドウがない場合はエラーになる", async () => {
-    registerIpcHandlers(() => ({ ...DEFAULT_SETTINGS }));
+    registerIpcHandlers(() => ({ ...DEFAULT_SETTINGS }), mocks.importDroppedVideo);
 
     mocks.fromWebContents.mockReturnValue(null);
 
@@ -136,7 +200,7 @@ describe("Main ProcessのIPC通信", () => {
   });
 
   test("有効なエラーをOS標準ダイアログに渡す", async () => {
-    registerIpcHandlers(() => ({ ...DEFAULT_SETTINGS }));
+    registerIpcHandlers(() => ({ ...DEFAULT_SETTINGS }), mocks.importDroppedVideo);
 
     const sender = {};
     const mainWindow = {};
