@@ -1,5 +1,5 @@
-const CELL_WIDTH = 8;
-const CELL_HEIGHT = 16;
+import type { FontSize } from "../../../shared/settings";
+import { getFontMetrics } from "./font";
 
 export type GridOptions = {
   videoWidth: number;
@@ -7,6 +7,7 @@ export type GridOptions = {
   viewportWidth: number;
   viewportHeight: number;
   mode: "fit" | "scroll";
+  fontSize: FontSize;
 };
 
 export type GridResult = {
@@ -17,7 +18,8 @@ export type GridResult = {
 };
 
 export const calculateGrid = (options: GridOptions): GridResult => {
-  const { videoWidth, videoHeight, viewportWidth, viewportHeight, mode } = options;
+  const { videoWidth, videoHeight, viewportWidth, viewportHeight, mode, fontSize } = options;
+  const { cellWidth: CELL_WIDTH, cellHeight: CELL_HEIGHT } = getFontMetrics(fontSize);
 
   const sizes = [videoWidth, videoHeight, viewportWidth, viewportHeight];
 

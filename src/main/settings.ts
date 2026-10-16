@@ -4,7 +4,7 @@ import { dirname, join } from "node:path";
 
 import { app } from "electron";
 
-import { type AppSettings, DEFAULT_SETTINGS } from "../shared/settings";
+import { type AppSettings, DEFAULT_SETTINGS, isFontSize } from "../shared/settings";
 
 const SETTINGS_FILE = "settings.json";
 
@@ -25,7 +25,7 @@ const isAppSettings = (value: unknown): value is AppSettings => {
 
   const validLoopStyle = settings.loopStyle === "transition" || settings.loopStyle === "direct";
 
-  return validDisplayMode && validLoopStyle;
+  return validDisplayMode && validLoopStyle && isFontSize(settings.fontSize);
 };
 
 // 保存済みの設定を読み込む。
@@ -49,11 +49,22 @@ export const loadSettings = async (): Promise<AppSettings> => {
   // JSONを解析する。
   const parsed: unknown = JSON.parse(content);
 
-  if (!isAppSettings(parsed)) {
+  if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) {
     throw new Error("設定ファイルの内容が不正です。");
   }
 
-  return parsed;
+  // Older settings may omit fontSize; previously allowed 22/24/26px values now use 20px.
+  const savedSize = "fontSize" in parsed ? parsed.fontSize : undefined;
+  const settings: unknown = {
+    ...DEFAULT_SETTINGS,
+    ...parsed,
+    ...(savedSize === 22 || savedSize === 24 || savedSize === 26 ? { fontSize: 20 } : {}),
+  };
+  if (!isAppSettings(settings)) {
+    throw new Error("設定ファイルの内容が不正です。");
+  }
+
+  return settings;
 };
 
 // 設定をファイルに保存する。

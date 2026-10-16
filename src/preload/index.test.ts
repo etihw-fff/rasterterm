@@ -140,6 +140,7 @@ describe("PreloadのIPC通信", () => {
     const settings: AppSettings = {
       displayMode: "scroll",
       loopStyle: "direct",
+      fontSize: 10,
     };
 
     mocks.invoke.mockResolvedValueOnce(settings);
@@ -167,6 +168,7 @@ describe("PreloadのIPC通信", () => {
     const settings: AppSettings = {
       displayMode: "scroll",
       loopStyle: "direct",
+      fontSize: 10,
     };
 
     handler({}, settings);

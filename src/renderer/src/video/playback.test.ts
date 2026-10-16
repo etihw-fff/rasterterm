@@ -160,6 +160,7 @@ describe("ASCII動画の再生制御", () => {
       canvas,
       viewport: viewport as unknown as HTMLElement,
       mode,
+      fontSize: 16,
       onError,
     });
   };
@@ -211,11 +212,29 @@ describe("ASCII動画の再生制御", () => {
       viewportWidth: 640,
       viewportHeight: 400,
       mode: "fit",
+      fontSize: 16,
     });
 
     expect(canvas.style.width).toBe("640px");
     expect(canvas.style.height).toBe("368px");
     expect(play).toHaveBeenCalledTimes(1);
+  });
+
+  test("文字サイズ変更後のリサイズで新しいセル寸法を使用する", async () => {
+    let fontSize: 10 | 16 = 16;
+    const controller = createVideoPlayback({
+      video,
+      canvas,
+      viewport: viewport as unknown as HTMLElement,
+      mode: "fit",
+      fontSize: () => fontSize,
+      onError,
+    });
+    await controller.start();
+    fontSize = 10;
+    controller.resize();
+    expect(mocks.calculateGrid).toHaveBeenLastCalledWith(expect.objectContaining({ fontSize: 10 }));
+    expect(mocks.drawAsciiFrame).toHaveBeenLastCalledWith(context, glyphs, grid, 10);
   });
 
   test("再生開始時に現在フレームをASCII文字として描画する", async () => {
@@ -226,7 +245,7 @@ describe("ASCII動画の再生制御", () => {
     expect(mocks.readFrame).toHaveBeenCalledExactlyOnceWith(video, grid);
     expect(mocks.convertFrameToGlyphs).toHaveBeenCalledExactlyOnceWith(imageData);
     expect(resetTransform).toHaveBeenCalledTimes(1);
-    expect(mocks.drawAsciiFrame).toHaveBeenCalledExactlyOnceWith(context, glyphs, grid);
+    expect(mocks.drawAsciiFrame).toHaveBeenCalledExactlyOnceWith(context, glyphs, grid, 16);
   });
 
   test("再生開始後に次のフレーム更新を1件予約する", async () => {
@@ -414,6 +433,7 @@ describe("ASCII動画の再生制御", () => {
       viewportWidth: 800,
       viewportHeight: 500,
       mode: "fit",
+      fontSize: 16,
     });
 
     expect(canvas.style.width).toBe("800px");

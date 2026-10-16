@@ -8,6 +8,7 @@ import { browser } from "@wdio/globals";
 type AppSettings = {
   displayMode: "fit" | "scroll";
   loopStyle: "transition" | "direct";
+  fontSize: number;
 };
 
 type TestWindow = Window & {
@@ -34,7 +35,7 @@ const getSettings = async (): Promise<AppSettings> => {
 
 // OS標準メニューの指定項目を実行する。
 const selectMenuItem = async (
-  category: "Display Mode" | "Loop Style",
+  category: "Display Mode" | "Loop Style" | "Font Size",
   label: string,
 ): Promise<void> => {
   await browser.electron.execute(
@@ -65,7 +66,11 @@ const waitForSettings = async (expected: AppSettings): Promise<void> => {
     async () => {
       const actual = await getSettings();
 
-      return actual.displayMode === expected.displayMode && actual.loopStyle === expected.loopStyle;
+      return (
+        actual.displayMode === expected.displayMode &&
+        actual.loopStyle === expected.loopStyle &&
+        actual.fontSize === expected.fontSize
+      );
     },
     {
       timeout: 10000,
@@ -84,6 +89,7 @@ describe("RasterTerm 設定連携 E2E", () => {
 
     assert.ok(validDisplayModes.includes(settings.displayMode));
     assert.ok(validLoopStyles.includes(settings.loopStyle));
+    assert.ok([8, 10, 12, 14, 16, 18, 20].includes(settings.fontSize));
 
     const menuState = await browser.electron.execute((electron) => {
       const menu = electron.Menu.getApplicationMenu();
@@ -136,6 +142,7 @@ describe("RasterTerm 設定連携 E2E", () => {
       const nextSettings: AppSettings = {
         displayMode: originalSettings.displayMode === "fit" ? "scroll" : "fit",
         loopStyle: originalSettings.loopStyle === "transition" ? "direct" : "transition",
+        fontSize: originalSettings.fontSize === 10 ? 12 : 10,
       };
 
       // Display Modeを変更する。
@@ -152,15 +159,24 @@ describe("RasterTerm 設定連携 E2E", () => {
         nextSettings.loopStyle === "transition" ? "Transition" : "Direct",
       );
 
-      await waitForSettings(nextSettings);
+      await waitForSettings({ ...nextSettings, fontSize: originalSettings.fontSize });
 
-      // MainからRendererへ2回通知されたことを確認する。
+      // 7段階のフォントサイズから新しい値を選択する。
+      await selectMenuItem("Font Size", `${String(nextSettings.fontSize)}px`);
+      await waitForSettings(nextSettings);
+      const visibleFont = await browser.execute(() => {
+        const canvas = document.querySelector<HTMLCanvasElement>("#ascii-canvas");
+        return canvas?.getContext("2d")?.font;
+      });
+      assert.equal(visibleFont, `${String(nextSettings.fontSize)}px "RasterTerm VGA"`);
+
+      // MainからRendererへ3回通知されたことを確認する。
       const receivedEvents = await browser.execute(() => {
         return (window as TestWindow).testSettingsEvents ?? [];
       });
 
-      assert.equal(receivedEvents.length, 2);
-      assert.deepEqual(receivedEvents[1], nextSettings);
+      assert.equal(receivedEvents.length, 3);
+      assert.deepEqual(receivedEvents[2], nextSettings);
 
       // 設定がJSONファイルへ保存されたことを確認する。
       const content = await readFile(join(temporaryDirectory, "settings.json"), "utf8");
@@ -180,6 +196,7 @@ describe("RasterTerm 設定連携 E2E", () => {
           await waitForSettings({
             displayMode: originalSettings.displayMode,
             loopStyle: (await getSettings()).loopStyle,
+            fontSize: (await getSettings()).fontSize,
           });
 
           await selectMenuItem(
@@ -187,6 +204,8 @@ describe("RasterTerm 設定連携 E2E", () => {
             originalSettings.loopStyle === "transition" ? "Transition" : "Direct",
           );
 
+          await waitForSettings({ ...originalSettings, fontSize: (await getSettings()).fontSize });
+          await selectMenuItem("Font Size", `${String(originalSettings.fontSize)}px`);
           await waitForSettings(originalSettings);
         }
       } finally {

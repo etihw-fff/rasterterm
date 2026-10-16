@@ -1,7 +1,7 @@
 import type { MenuItemConstructorOptions } from "electron";
 import { beforeEach, describe, expect, test, vi } from "vitest";
 
-import { type AppSettings, DEFAULT_SETTINGS } from "../shared/settings";
+import { type AppSettings, DEFAULT_SETTINGS, FONT_SIZES } from "../shared/settings";
 import { registerApplicationMenu } from "./menu";
 
 const mocks = vi.hoisted(() => ({
@@ -28,7 +28,7 @@ vi.mock("./settings", () => ({
 
 // メニュー内の設定項目を取得する。
 const getSettingItem = (
-  category: "Display Mode" | "Loop Style",
+  category: "Display Mode" | "Loop Style" | "Font Size",
   label: string,
 ): MenuItemConstructorOptions => {
   const template = mocks.buildFromTemplate.mock.lastCall?.[0];
@@ -93,6 +93,11 @@ describe("OS標準アプリケーションメニュー", () => {
 
     expect(getSettingItem("Loop Style", "Transition").checked).toBe(true);
     expect(getSettingItem("Loop Style", "Direct").checked).toBe(false);
+    expect(getSettingItem("Font Size", "16px").checked).toBe(true);
+    expect(getSettingItem("Font Size", "12px").checked).toBe(false);
+    for (const size of FONT_SIZES) {
+      expect(getSettingItem("Font Size", `${String(size)}px`).type).toBe("radio");
+    }
 
     expect(mocks.saveSettings).not.toHaveBeenCalled();
     expect(onChanged).not.toHaveBeenCalled();
@@ -108,6 +113,7 @@ describe("OS標準アプリケーションメニュー", () => {
     const expected: AppSettings = {
       displayMode: "scroll",
       loopStyle: "transition",
+      fontSize: 16,
     };
 
     await vi.waitFor(() => {
@@ -128,6 +134,7 @@ describe("OS標準アプリケーションメニュー", () => {
     const expected: AppSettings = {
       displayMode: "fit",
       loopStyle: "direct",
+      fontSize: 16,
     };
 
     await vi.waitFor(() => {
@@ -135,6 +142,24 @@ describe("OS標準アプリケーションメニュー", () => {
       expect(onChanged).toHaveBeenCalledExactlyOnceWith(expected);
       expect(getSettingItem("Loop Style", "Direct").checked).toBe(true);
       expect(getSettingItem("Loop Style", "Transition").checked).toBe(false);
+    });
+  });
+
+  test("文字サイズ7段階はラジオ項目で、変更すると保存してチェックを移す", async () => {
+    const onChanged = vi.fn<(settings: AppSettings) => void>();
+    registerApplicationMenu(DEFAULT_SETTINGS, onChanged);
+    activate(getSettingItem("Font Size", "10px"));
+    await vi.waitFor(() => {
+      expect(mocks.saveSettings).toHaveBeenCalledExactlyOnceWith({
+        ...DEFAULT_SETTINGS,
+        fontSize: 10,
+      });
+      expect(onChanged).toHaveBeenCalledExactlyOnceWith({
+        ...DEFAULT_SETTINGS,
+        fontSize: 10,
+      });
+      expect(getSettingItem("Font Size", "10px").checked).toBe(true);
+      expect(getSettingItem("Font Size", "16px").checked).toBe(false);
     });
   });
 
