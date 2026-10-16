@@ -31,6 +31,20 @@ mac:
   identity: "-"
 dmg:
   artifactName: ${name}-${version}-${arch}.${ext}
+  backgroundColor: "#ECECEC"
+  window:
+    width: 540
+    height: 380
+  iconSize: 80
+  iconTextSize: 12
+  contents:
+    - x: 130
+      y: 190
+      type: file
+    - x: 410
+      y: 190
+      type: link
+      path: /Applications
 win:
   executableName: RasterTerm
   target:
