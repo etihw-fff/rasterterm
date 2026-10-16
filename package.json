@@ -2,7 +2,7 @@
   "name": "rasterterm",
   "version": "0.1.0",
   "private": true,
-  "description": "RasterTerm Electron development starter",
+  "description": "Desktop video player that renders moving images as ASCII art",
   "author": "RasterTerm",
   "main": "./out/main/index.js",
   "packageManager": "npm@11.19.0",
