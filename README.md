@@ -6,6 +6,16 @@
 
 Electronを使用したmacOS・Windows向けアプリです。動画の変換と再生は端末内で行われます。
 
+## スクリーンショット
+
+### ASCII再生
+
+<img src="docs/images/ascii-playback.png" alt="動画をASCII文字に変換して再生するRasterTermの画面" width="420" />
+
+### 起動画面
+
+<img src="docs/images/startup.png" alt="ASCIIロゴと動画のドラッグ＆ドロップ案内を表示する起動画面" width="720" />
+
 ## 主な機能
 
 - **動画のASCII再生** — MP4 / MOV / WebMをドラッグ＆ドロップして読み込み、音声なしで繰り返し再生します。
