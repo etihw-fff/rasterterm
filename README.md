@@ -33,9 +33,9 @@ Electronを使用したmacOS・Windows向けアプリです。動画の変換と
 
 | OS                             | ダウンロードするファイル           | インストール方法                                  |
 | ------------------------------ | ---------------------------------- | ------------------------------------------------- |
-| macOS（Apple Silicon / Intel） | `rasterterm-0.1.0-universal.dmg`   | DMGを開き、RasterTermをApplicationsフォルダへ移動 |
-| Windows（Intel / AMD）         | `rasterterm-0.1.0-x64-setup.exe`   | インストーラーを起動し、画面の案内に従う          |
-| Windows（ARM64）               | `rasterterm-0.1.0-arm64-setup.exe` | インストーラーを起動し、画面の案内に従う          |
+| macOS（Apple Silicon / Intel） | `rasterterm-0.1.1-universal.dmg`   | DMGを開き、RasterTermをApplicationsフォルダへ移動 |
+| Windows（Intel / AMD）         | `rasterterm-0.1.1-x64-setup.exe`   | インストーラーを起動し、画面の案内に従う          |
+| Windows（ARM64）               | `rasterterm-0.1.1-arm64-setup.exe` | インストーラーを起動し、画面の案内に従う          |
 
 **署名について：** 現在配布するビルドは、macOSではAppleによる公証なし、Windowsではコード署名なしです。このため、OSのセキュリティ警告が表示される可能性があります。ダウンロード元とファイルを確認したうえで、ご自身の環境のセキュリティ設定に従って判断してください。
 
